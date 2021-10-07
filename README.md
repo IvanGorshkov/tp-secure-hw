@@ -12,6 +12,8 @@
 
 ## Запуск
 
+HTTPS работает только в Chrome :/
+
 ```
  go run main.go   
 ```

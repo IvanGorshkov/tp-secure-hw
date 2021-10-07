@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 )
@@ -19,7 +18,11 @@ func handlerHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	CopyHeader(w.Header(), resp.Header)
+
+	for key, values := range w.Header() {
+		resp.Header.Set(key, values[0])
+	}
+
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
@@ -49,7 +52,10 @@ func handlerHTTPS(w http.ResponseWriter, r *http.Request) {
 func transfer(writeCloser io.WriteCloser, readCloser io.ReadCloser) {
 	defer writeCloser.Close()
 	defer readCloser.Close()
-	_, _ = io.Copy(writeCloser, readCloser)
+	_, err := io.Copy(writeCloser, readCloser)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -64,17 +70,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func CopyHeader(dest, src http.Header) {
-	for key, values := range src {
-		dest.Set(key, values[0])
-	}
-}
-
 func main() {
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      http.HandlerFunc(handler),
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 	}
-	log.Fatal(server.ListenAndServe())
+	fmt.Println(server.ListenAndServe())
 }
