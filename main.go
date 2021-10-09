@@ -4,58 +4,43 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 )
 
 func handlerHTTP(w http.ResponseWriter, r *http.Request) {
-	r.RequestURI = ""
 	r.Header.Del("Proxy-Connection")
-
-	resp, err := http.DefaultTransport.RoundTrip(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer resp.Body.Close()
-
-	for key, values := range w.Header() {
-		resp.Header.Set(key, values[0])
-	}
-
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
-}
-
-func handlerHTTPS(w http.ResponseWriter, r *http.Request) {
-	destConn, err := net.Dial("tcp", r.Host)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
-		return
-	}
-	clientConn, _, err := hijacker.Hijack()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	}
-
-	go transfer(destConn, clientConn)
-	go transfer(clientConn, destConn)
-
-}
-func transfer(writeCloser io.WriteCloser, readCloser io.ReadCloser) {
-	defer writeCloser.Close()
-	defer readCloser.Close()
-	_, err := io.Copy(writeCloser, readCloser)
+	proxyResponse, err := RequestViaProxy(r)
 	if err != nil {
 		fmt.Println(err)
 	}
+	defer proxyResponse.Body.Close()
+	CopyResponse(proxyResponse, w)
+}
+
+func RequestViaProxy(r *http.Request) (*http.Response, error) {
+	proxyResponse, err := http.DefaultTransport.RoundTrip(r)
+	if err != nil {
+		return nil, err
+	}
+
+	return proxyResponse, nil
+}
+
+func CopyResponse(proxyResponse *http.Response, w http.ResponseWriter) {
+	for header, values := range proxyResponse.Header {
+		for _, value := range values {
+			w.Header().Add(header, value)
+		}
+	}
+	w.WriteHeader(proxyResponse.StatusCode)
+	_, err := io.Copy(w, proxyResponse.Body)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func handlerHTTPS(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
